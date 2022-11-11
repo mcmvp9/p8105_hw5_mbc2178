@@ -1,5 +1,5 @@
 ---
-title: "p8105_hw5_mbc2178"
+title: "P8105_hw5_mbc2178"
 author: "Melvin Coleman"
 date: '`r format(Sys.time(), "%Y-%m-%d")`'
 output: github_document
@@ -7,6 +7,9 @@ output: github_document
 
 ```{r setup, include=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
+library(dplyr)
+library(stringr)
+set.seed(1)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
@@ -23,3 +26,171 @@ options(
 scale_colour_discrete = scale_colour_viridis_d
 scale_fill_discrete = scale_fill_viridis_d
 ```
+
+Let's define a function to calculate proportions with confidence intervals in 
+this homework problem. This function will be used in problem 2.
+
+```{r}
+prop_fx = function(x,n) {
+ 
+   prop.test(x,n) %>% 
+    broom::tidy() %>% 
+    
+   select(estimate, conf.low, conf.high) %>% 
+          mutate(estimate = round(estimate*100, 2),
+                  conf.low = round(conf.low*100, 2),
+                  conf.high = round(conf.high*100, 2))
+}
+```
+
+### Problem 1 
+
+```{r}
+
+```
+
+
+### Problem 2 
+
+Let's examine the Washington Post's data on homicides in 50 large U.S. cities. 
+We will refer to this raw dataset as `homicide_df`.
+
+```{r}
+homicide_df =
+  read_csv('data/homicide-data.csv', col_names = TRUE) 
+```
+
+The `homicide_df` contains data from 50 large cities in the U.S. with `r ncol(homicide_df)`
+fields/ variables and `r nrow(homicide_df)` records/observations. This dataset includes
+first and last names as well as ethnicity of homicide victims (`victim_last`,`victim_first`,
+`victim_race`), dates of homicide report(`reported_date`) and the status of cases characterized 
+as closed with arrest or closed without arrest (`disposition`). In addition, the 
+dataset also contains the longitude (`lon`) and latitude (`lat`) of the cities 
+where the homicide occurred. 
+
+Let's perform some cleaning and manipulation on our dataset. We first create 
+a new variable `city_state` that combines the name of cities and states. 
+
+```{r}
+homicide_df =
+  homicide_df %>% 
+  janitor::clean_names() %>% 
+  mutate(
+    city_state = str_c(city,',',state)) 
+```
+
+We now summarize within cities to obtain the total number of homicides within each city
+across the U.S. from our dataset. We created a new dataset called `tot_homicides`
+containing just two variables; `city_state` containing the cities across states and 
+`tot_homicides` containing the total number of homicides per city in the United 
+States.
+
+```{r}
+tot_homicides =
+  homicide_df %>% 
+    group_by(city_state) %>% 
+    summarise(tot_number_homicides = n()) %>% 
+    arrange(desc(tot_number_homicides)) 
+  
+```
+From our analysis, the city of Chicago has the largest number of total homicides 
+in the United States with a total of 5,535 homicides. Tulsa,AL has the least 
+number of homicides. This is most likely a data error as there is no city in the 
+U.S in Alabama named Tulsa.
+
+
+We now summarize within cities to obtain the total number of unsolved homicides (those
+for which the disposition was "Closed without arrest" or "Open/No arrest") across the
+U.S. from our dataset.
+We replaced all missing values with 0 for those cities that did not have any cases 
+closed without arrest and/or open/no arrest. We used the `pivot wider` function 
+to create a table that's easier to read with the columns being the disposition
+status. We created a new variable called  `total_unsolved_homicides` that summed
+the dispositions giving us the total unsolved homicides per city in the US.
+We called this new dataset `unsolved_homicides`.
+
+```{r}
+unsolved_homicides =
+  homicide_df %>% 
+      group_by(city_state, disposition) %>% 
+       filter(disposition %in% c('Closed without arrest', 'Open/No arrest')) %>% 
+        summarize(n = n()) %>% 
+     
+    mutate(
+      city_state = as.factor(city_state)) %>% 
+        arrange(desc(n)) %>% 
+          pivot_wider(
+            names_from = disposition,
+              values_from = n
+  ) %>% 
+      janitor::clean_names() %>% 
+           replace(is.na(.),0) %>% 
+  mutate(total_unsolved_homicides = sum(open_no_arrest, closed_without_arrest))
+  
+```
+From our analysis, Chicago has the largest number of unsolved homicides in the US (4,073) with 
+3,686 cases still open without any arrest and 387 cases closed without arrest. On
+the other hand, Tampa has the least number of unsolved homicides in the US (95) with
+87 cases still open without arrest and 8 cases closed without arrest.
+
+
+We now merge the two datasets created above, `tot_homicides` and `unsolved_homicides`.
+This will allow us to perform additional manipulations and answer specific questions 
+using the variables created from the analysis conducted to create the datasets.
+We kept the following variables in the newly created dataset, `homicide_mrg` :
+`city_state`, `total_unsolved_homicides`, `tot_number_homicides`.
+
+```{r}
+homicide_mrg =
+  merge(unsolved_homicides, tot_homicides) %>% 
+    select(city_state, total_unsolved_homicides, tot_number_homicides) %>% 
+      arrange(desc(tot_number_homicides)) 
+```
+
+Now we examine the proportion of homicides that are unsolved for the city of Baltimore
+by using the `prop.test` function.
+
+Number of successes(no. of homicides unsolved) and the number of trials (# of homicides) for Baltimore 
+
+```{r}
+prop_baltimore =
+  prop.test(x= 1825,n= 2827) %>% 
+    broom::tidy() %>% 
+   select(estimate, conf.low, conf.high) %>% 
+  mutate(estimate = round(estimate*100, 2),
+        conf.low = round(conf.low*100, 2),
+        conf.high = round(conf.high*100, 2))
+    
+prop_baltimore
+```
+`r prop_baltimore %>% pull(estimate)` of homicides with a confidence interval of 
+`r prop_baltimore %>% pull(conf.low)` and `r prop_baltimore %>% pull(conf.high)`
+are unsolved in the city of Baltimore, MD. 
+
+
+Now we run `prop.test` for each of the cities in our dataset, and extract both 
+the proportion of unsolved homicides and the confidence interval for each. We apply
+the function created above and use the `map` function to iterate across all the 
+cities in the US that exist in our `homicide_mrg` dataset. 
+`data` variable is created as a list that contains the proportion estimates and
+confidence intervals for each city.
+
+***** TO DO STILL 
+-  create a tidy dataframe with estimated proportions and CIs for each city.
+
+
+Do this within a “tidy” pipeline, making use of purrr::map, purrr::map2, 
+list columns and unnest as necessary to create a tidy dataframe with estimated 
+proportions and CIs for each city.
+
+- create a function that runs a prop test for each city 
+```{r}
+prop_cities=
+  merged_df %>% 
+      mutate(data = map2(.x =total_unsolved_homicides,.y=tot_number_homicides,.f=prop_fx))
+```
+
+
+
+
+
