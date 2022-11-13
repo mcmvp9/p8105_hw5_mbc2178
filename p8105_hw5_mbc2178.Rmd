@@ -202,9 +202,7 @@ Cities are organized according to the proportion of unsolved homicides
 
 ```{r}
 prop_cities %>% 
-  arrange(desc(estimate)) %>% 
-  mutate(city_state = as.character(city_state)) %>% 
- 
+  
   ggplot(aes(x= fct_reorder(city_state, -estimate), y= estimate)) + 
   geom_bar(stat="identity", color="black", fill="lightblue",
            position=position_dodge()) +
@@ -218,6 +216,8 @@ prop_cities %>%
   ylab("Proportions") +
   theme(axis.text.x = element_text(angle = 60, hjust = 1))
 ```
+
+### Problem 3
 
 
 
