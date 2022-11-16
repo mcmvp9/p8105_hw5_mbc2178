@@ -27,10 +27,12 @@ scale_colour_discrete = scale_colour_viridis_d
 scale_fill_discrete = scale_fill_viridis_d
 ```
 
-Let's define a function to calculate proportions with confidence intervals in 
+### Functions
+Let's define the function to calculate proportions with confidence intervals in 
 this homework problem. This function will be used in problem 2.
 
 ```{r}
+  # Prop.test function
 prop_fx = function(x,n) {
  
    prop.test(x,n) %>% 
@@ -41,6 +43,29 @@ prop_fx = function(x,n) {
                   conf.low = round(conf.low*100, 2),
                   conf.high = round(conf.high*100, 2))
 }
+```
+
+Let's define the function to perform t-test for a mean(s) and the p-value arising 
+from a test of H:μ=0 using α=0.05. Use `tidy.broom` function to clean output, 
+and round values to 3 digits. This function will be used in problem 3. 
+
+```{r}
+  # T-test function 
+  
+  ttest_fx = function(true_mu){
+    
+     sample = rnorm(30, mean= true_mu, sd=5) 
+    
+    test_results = t.test(x=sample, mu=0) %>% 
+      broom::tidy() %>% 
+      select(estimate, p.value) %>% 
+      
+      # Round estimate & p-value to 3 digits
+      mutate(
+        estimate = round(estimate,3),
+        p.value = round(p.value,3)
+      )
+  }
 ```
 
 ### Problem 1 
@@ -185,7 +210,8 @@ Output was saved as `prop_cities`.
 prop_cities=
   homicide_mrg %>% 
       mutate(homicide_prop =
-               map2(.x =total_unsolved_homicides,.y=tot_number_homicides,.f=prop_fx)) %>% 
+               map2(.x =total_unsolved_homicides,.y=tot_number_homicides,
+                    .f= ~prop_fx(x = .x, n = .y))) %>% 
     unnest(homicide_prop) %>% 
   select(city_state,estimate, conf.low, conf.high)
 
@@ -219,6 +245,48 @@ prop_cities %>%
 
 ### Problem 3
 
+In this problem, we conduct a simulation to explore power in a one-sample t-test.
+We defined a function above with these fixed criteria, sample size(n) = 30 and
+sigma (sd) = 5. 
+
+First, we set the mean = 0 and generate 5,000 datasets following a normal distribution 
+to create a tidy dataframe by making use of `expand_grid`, `map2` and `unnest` 
+functions. We performed a t-test setting our null hypothesis = 0 with a 
+95% confidence interval. We used the `broom::tidy` function to clean the output 
+of the t-test and saved the estimated mean and corresponding p-value.
+
+
+Performed a t-test for a true mean = 0.  
+```{r}
+sim_results_zero_df =
+  expand_grid(
+    true_mu = 0,
+    iteration = 1:100
+   ) %>% 
+  mutate(
+    estimate_df = 
+      map(.x = true_mu, ~ttest_fx(true_mu = .x))
+  ) %>% 
+  unnest(estimate_df) 
+  
+```
+We repeated a similar procedure for true mean = 1,2,3,4,5,and 6.
+
+```{r}
+
+sim_multiple_df =
+  expand_grid(
+    true_mu = 1:6,
+    iteration = 1:100
+   ) %>% 
+  mutate(
+    estimate_df= 
+      map(.x = true_mu, ~ttest_fx(true_mu = .x))
+  ) %>% 
+  unnest(estimate_df) 
+
+```
+  
 
 
 
