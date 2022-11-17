@@ -1,14 +1,17 @@
 ---
 title: "P8105_hw5_mbc2178"
 author: "Melvin Coleman"
-date: '`r format(Sys.time(), "%Y-%m-%d")`'
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output: github_document
+always_allow_html: true
 ---
 
 ```{r setup, include=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(dplyr)
-library(stringr)
+library(stringr) 
+library(plotly)
+
 set.seed(1)
 
 knitr::opts_chunk$set(
@@ -46,7 +49,7 @@ prop_fx = function(x,n) {
 ```
 
 Let's define the function to perform t-test for a mean(s) and the p-value arising 
-from a test of H:μ=0 using α=0.05. Use `tidy.broom` function to clean output, 
+from a test of null hypothesis =0 using alpha =0.05. Used `tidy.broom` function to clean output,
 and round values to 3 digits. This function will be used in problem 3. 
 
 ```{r}
@@ -86,9 +89,9 @@ homicide_df =
 ```
 
 The `homicide_df` contains data from 50 large cities in the U.S. with `r ncol(homicide_df)`
-fields/ variables and `r nrow(homicide_df)` records/observations. This dataset includes
+fields or variables and `r nrow(homicide_df)` records or observations. This dataset includes
 first and last names as well as ethnicity of homicide victims (`victim_last`,`victim_first`,
-`victim_race`), dates of homicide report(`reported_date`) and the status of cases characterized 
+`victim_race`), dates of homicide report (`reported_date`) and the status of cases characterized
 as closed with arrest or closed without arrest (`disposition`). In addition, the 
 dataset also contains the longitude (`lon`) and latitude (`lat`) of the cities 
 where the homicide occurred. 
@@ -227,9 +230,12 @@ city adding error bars based on the upper and lower limits of the confidence int
 Cities are organized according to the proportion of unsolved homicides 
 
 ```{r}
+cities_plot =
 prop_cities %>% 
+  mutate(city_state = fct_reorder(city_state,estimate)
+         ) %>% 
   
-  ggplot(aes(x= fct_reorder(city_state, -estimate), y= estimate)) + 
+  ggplot(aes(x=city_state, y= estimate)) + 
   geom_bar(stat="identity", color="black", fill="lightblue",
            position=position_dodge()) +
   scale_y_continuous(breaks = c(0,20,40,60,80,100)) +
@@ -241,6 +247,8 @@ prop_cities %>%
   xlab("Cities") +
   ylab("Proportions") +
   theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+cities_plot
 ```
 
 ### Problem 3
@@ -257,11 +265,11 @@ of the t-test and saved the estimated mean and corresponding p-value.
 
 
 Performed a t-test for a true mean = 0.  
-```{r}
+```{r, cache=TRUE}
 sim_results_zero_df =
   expand_grid(
     true_mu = 0,
-    iteration = 1:100
+    iter = 1:5000
    ) %>% 
   mutate(
     estimate_df = 
@@ -270,14 +278,14 @@ sim_results_zero_df =
   unnest(estimate_df) 
   
 ```
-We repeated a similar procedure for true mean = 1,2,3,4,5,and 6.
+We repeated a similar procedure for true mean = 1,2,3,4,5, and 6.
 
 ```{r}
 
 sim_multiple_df =
   expand_grid(
     true_mu = 1:6,
-    iteration = 1:100
+    iter = 1:5000
    ) %>% 
   mutate(
     estimate_df= 
@@ -287,6 +295,110 @@ sim_multiple_df =
 
 ```
   
+Now, we make a plot showing the proportion of times the null was rejected (the power
+of the test) on the y-axis and the true value of the mean(`true_mu`) on the x axis.
+A new variable `power` was created from a `mutate` and `ifelse` statement to specify
+whether the null was rejected or not. `power` was divided by the sample size of 
+5,000 and multiplied by 100 to find the proportion. 
 
+```{r}
+null_plot =
+sim_multiple_df %>% 
+  mutate(
+    power = ifelse(p.value < 0.05, "rejected", "not_rejected"),
+    true_mu = as.factor(true_mu)
+  ) %>% 
+  group_by(true_mu,power) %>% 
+  count(power) %>% 
+  
+  pivot_wider(
+    names_from = power,
+    values_from = n
+  ) %>% 
+  
+  mutate(
+    percent_rejected = (rejected/5000) * 100
+  ) %>% 
+  
+  ggplot(aes(x = true_mu, y = percent_rejected)) +
+  geom_bar(stat= 'identity', color="lightblue", fill="grey",
+           position = position_dodge()) +
+  
+  labs(title = "Effect size and Power") +
+  xlab("True Mean") +
+  ylab("Power(%)")
 
+null_plot
+```
+
+From the graph above, as the true mean increased, the proportion of times the null 
+was rejected also increased. From the simulation, we can conclude that as effect 
+size increases, so does power. Furthermore, after a certain point as observed in the 
+graph from a true mean of 5-6 ,the power remains constant as the effect size doesn't
+change the association.
+
+Now, we make a plot showing the average estimate of the mean on the y-axis and the 
+true value of the mean on the x axis. We used an `ifelse` function in a `mutate`
+to create a new variable, `power` that specified whether the null was rejected or 
+not based on the p-value. We grouped by the true mean (`true_mu`) and created an 
+interactive plot as seen below. 
+In the same code chunk, we made another plot with the average estimate of the 
+true mean only in samples for which the null was rejected on the y axis and the 
+true value of the mean on the x axis. The same procedure applied to produce the 
+first plot was used to create the plot below. 
+
+```{r}
+## Plot 1
+sim1_plot =
+sim_multiple_df %>%
+  mutate(
+    true_mu = as.factor(true_mu)
+  ) %>% 
+  group_by(true_mu) %>% 
+  summarize(n_obs = n(),
+           avg_mean= mean(estimate)) %>% 
+  
+  ggplot(aes(x = true_mu, y = avg_mean, color = true_mu)) +
+  geom_point()  +
+  
+  labs(title = "Estimate of mean vs True mean") +
+  xlab("True mean") +
+  ylab("Estimate of mean") +
+  theme(legend.position="none")
+
+## Plot 2
+sim2_plot =
+sim_multiple_df %>% 
+  
+  mutate(
+    power = ifelse(p.value <0.05, "rejected", "not rejected"),
+    true_mu = as.factor(true_mu)
+  ) %>% 
+  filter(power %in% c("rejected")) %>% 
+    mutate(
+    true_mu = as.factor(true_mu)
+  ) %>% 
+  group_by(true_mu) %>% 
+  summarize(n_obs = n(),
+           avg_mean= mean(estimate)) %>% 
+  
+  ggplot(aes(x=true_mu, y= avg_mean, color = true_mu)) +
+    geom_point() +
+  
+  labs(title = "Estimate of mean vs True mean (Samples null rejected Only)") +
+  xlab("True mean") +
+  ylab("Estimate of mean") +
+  theme(legend.position="none")
+
+## Output interactive plots
+sim1_plot
+sim2_plot
+```
+
+The sample average of the mean across tests for which 
+the null is rejected are approximately equal to the true mean values of 3,4, 5 and
+6 only. This is because when we have a large sample size, we expect the true mean to 
+approximate the estimated mean. In addition, with a large sample size and a large
+effect size, we expect to reject the null hypothesis more often compared to a small 
+effect size and/or sample size.
 
